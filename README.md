@@ -67,7 +67,7 @@ HTML:-
                                             <td data-label="Record 1">
                                                 <div class="slds-truncate" title={item.cr}>
                                                     <input type="radio" value={item.cr} name={item.field}
-                                                        onchange={getRadioBoxValue} checked={item.cr}>{item.cr}
+                                                        onchange={getRadioBoxValueCR} checked={item.cr}>{item.cr}
                                                 </div>
                                             </td>
                                             <td data-label="Record 2">
@@ -160,17 +160,19 @@ HTML:-
 JS:-
 
 ```
-import { LightningElement, track,api } from 'lwc';
+import { LightningElement, track,api,wire } from 'lwc';
 import getSObjectFieldsQuery from '@salesforce/apex/customObjectDuplicateClass.getSObjectFieldsQuery';
 import { updateRecord } from 'lightning/uiRecordApi';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import getSObjectFields from '@salesforce/apex/customObjectDuplicateClass.getSObjectFields';
-
 import mergeRecord from '@salesforce/apex/customObjectDuplicateClass.mergeRecord';
-
 import getCurrentRecord from '@salesforce/apex/customObjectDuplicateClass.getCurrentRecord';
+import getCurrentObjectRecordNameAndEmail from '@salesforce/apex/customObjectDuplicateClass.getCurrentObjectRecordNameAndEmail';
+import deleteMergedRecord from '@salesforce/apex/customObjectDuplicateClass.deleteMergedRecord';
 
-import getCurrentObjectRecordName from '@salesforce/apex/customObjectDuplicateClass.getCurrentObjectRecordName';
+// import { getObjectInfo } from 'lightning/uiObjectInfoApi';
+
+import getAllChildRecordsAndUpdate from '@salesforce/apex/customObjectDuplicateClass.getAllChildRecordsAndUpdate';
 
 const columns = [
     { label: 'Name', fieldName: 'Name', type: 'text',editable: true,},
@@ -179,11 +181,40 @@ const columns = [
 
 
 export default class CustomObjectDuplicateRecordMergeDynamically extends LightningElement {
+
+    // connectedCallback(){
+    //     this.wiredObjectInfo();
+    // }
+
+    // @track options;
+    // @track RelatedObjectData = [];
+    // @wire(getObjectInfo, { objectApiName: '$objectApiName' })
+    // wiredObjectInfo({ error, data }) {
+    //     if (data) {
+    //         this.options = data.childRelationships.map(relationship => ({ value: relationship.childObjectApiName, label: relationship.childObjectApiName }));
+    //         console.log('this.options',JSON.stringify(this.options));
+
+    //         this.RelatedObjectData = data;
+    //         console.log('this.RelatedObjectData',JSON.stringify(this.RelatedObjectData));
+
+    //         console.log('parentObjectOptions',JSON.stringify(data));
+    //     } else if (error) {
+    //         console.error('Error fetching object info:', error);
+    //     }
+    // }
+
+
+
+
+
+
+
     @track showData = [];
     @track showDuplicateRecords = false;
     @api objectApiName;
 
     @track recordName = '';
+    @track recordEmail = '';
     
     columns = columns;
 
@@ -195,8 +226,14 @@ export default class CustomObjectDuplicateRecordMergeDynamically extends Lightni
 
     async fetchRecordName() {
         try {
-            const result = await getCurrentObjectRecordName({ recId: this.recordId });
-            this.recordName = result;
+            const result = await getCurrentObjectRecordNameAndEmail({ recId: this.recordId }); 
+
+            this.recordName = result['Name'];
+                console.log('this.recordName ',this.recordName);
+                this.recordEmail = result['Email__c'];
+                console.log('this.recordEmail ',this.recordEmail);
+
+            // this.recordName = result;
             console.log("Record Name: ", this.recordName);
         } catch (error) {
             console.error('Error fetching record name:', error);
@@ -205,7 +242,7 @@ export default class CustomObjectDuplicateRecordMergeDynamically extends Lightni
 
      showButtonData() {
         this.showDuplicateRecords = true;
-        getSObjectFieldsQuery({sObjectName: this.objectApiName,name:this.recordName, currentRecordId: this.recordId})
+        getSObjectFieldsQuery({sObjectName: this.objectApiName,name:this.recordName, email:this.recordEmail, currentRecordId: this.recordId})
             .then(result => {
                 console.log('result::::',result);
                 // this.recordName = result.Name;
@@ -293,26 +330,38 @@ export default class CustomObjectDuplicateRecordMergeDynamically extends Lightni
     }
 
     // //Get Current Record Data
-     @track storeCurrentRecData ;
-    @track storeFieldNamesss ;
+    @track storeCurrentRecData = [];
+    @track storeFieldNamesss =[];
     async getCurrentRecord() {
         try {
             const result = await getCurrentRecord({ sObjectName: this.objectApiName, currentRecordId: this.recordId });
             console.log('Current Record:', result);
             this.storeCurrentRecData = Object.values(result[0]);
             this.storeFieldNamesss = Object.keys(result[0]);
+            console.log('this.storeCurrentRecDatathis.storeCurrentRecData:: ',JSON.stringify(this.storeCurrentRecData));
+            console.log('this.storeFieldNamesssthis.storeFieldNamesss:: ',JSON.stringify(this.storeFieldNamesss));
         } catch (error) {
             console.error('Error:', error);
         }
     }
 
     //Get Selected Checkbox Record
-    @track storeSelectedRecData;
+    @track storeSelectedRecData =[];
+    @track dami;
     async getSelectedRecord() {
         try {
             const result = await getCurrentRecord({ sObjectName: this.objectApiName, currentRecordId: this.getSelectedCheckBoxId });
             console.log('Selected Record:', result);
+            //Use Object.values to store only Values
             this.storeSelectedRecData = Object.values(result[0]);
+            this.dami = Object.entries(result[0]).map(item=> item[1]);
+            console.log('this.dami :: ',JSON.stringify(this.dami));
+            console.log('this.storeSelectedRecData after result: ', JSON.stringify(this.storeSelectedRecData));
+
+            // this.storeFieldNamesss = Object.keys(result[0]);
+
+            // this.storeFieldNamesss = Object.keys(result[0]);
+
         } catch (error) {
             console.error('Error:', error);
         }
@@ -323,9 +372,9 @@ export default class CustomObjectDuplicateRecordMergeDynamically extends Lightni
     //     this.processData();
     // }
     processData() {
-        console.log('this.storeFieldNames',this.storeFieldNamesss);
-        console.log('this.storeCurrentRecData',this.storeCurrentRecData);
-        console.log('this.storeSelectedRecData',this.storeSelectedRecData);
+        console.log('this.storeFieldNames',JSON.stringify(this.storeFieldNamesss));
+        console.log('this.storeCurrentRecData',JSON.stringify(this.storeCurrentRecData));
+        console.log('this.storeSelectedRecData',JSON.stringify(this.storeSelectedRecData));
 
         const minLength  = Math.min(this.storeFieldNamesss?.length, this.storeCurrentRecData?.length, this.storeSelectedRecData?.length);
         console.log('minLength',minLength);
@@ -342,37 +391,89 @@ export default class CustomObjectDuplicateRecordMergeDynamically extends Lightni
         }
      
     
-    @track radioBoxSelectedRecordValue;
+    @track selectedFields = [];
     getRadioBoxValue(event) {
-        this.radioBoxSelectedRecordValue = event.target.value;
-        console.log('Selected Record Value: ', this.radioBoxSelectedRecordValue);
-        this.mergedData = this.mergedData.map(item=>{
-            if(item.sr == this.radioBoxSelectedRecordValue){
-                console.log('iteeeem: ',JSON.stringify(item));
-                 item.isRecord2FieldSelected = event.target.checked;
+        const radioBoxSelectedRecordValue = event.target.name;
+        console.log('Selected Record Value: ', radioBoxSelectedRecordValue);
+        if(event.target.checked){
+            this.selectedFields.push(radioBoxSelectedRecordValue);
+        }else{
+            // Remove from selected fields if unchecked
+            const index = this.selectedFields.indexOf(radioBoxSelectedRecordValue);
+            console.log('indexx ',index);
+            if(index !== -1){
+                this.selectedFields.splice(index,1);
+                console.log('selectedFields SPLICE ',this.selectedFields);
             }
-            return item;
-        })
-        console.log('this.mergedData',JSON.stringify(this.mergedData));
-    }
+
+        }
+     }
+
 
     handleModalCancel(){
         this.showMergeData = false;
     }
+
+        //To delete Merged Record
+        deleteMergedRecord(mergeResult){
+            console.log('button clicked delete');
+            console.log('this.objectApiName deleted',JSON.stringify(this.objectApiName));
+            console.log('this.mergeRecordResult deleted',mergeResult);
+    
+             return deleteMergedRecord({sObjectName: this.objectApiName, selectedRecordId: this.getSelectedCheckBoxId, mergeRecordResult: mergeResult})
+             .then(result=>{
+                console.log('deleted Succesfully:::', result);
+             }).catch(error=>{
+                console.log('Errororor on deleting',error);
+             })
+         }
+    
     handleModalMerge(){
-        let selectedFields = [];
-        this.mergedData.forEach(item=>{
-            
-            if(item.isRecord2FieldSelected){
-                selectedFields.push(item.field);
-            }
-        })
-        console.log('selectedFields',JSON.stringify(selectedFields));
-        mergeRecord({sObjectName:this.objectApiName, selectedRecordId:this.getSelectedCheckBoxId, currentRecordId:this.recordId, selectedFields: selectedFields})
+        this.handleReparenting();
+        console.log('button clicked');
+        console.log('selectedFields',JSON.stringify(this.selectedFields));
+        console.log('this.objectApiName',JSON.stringify(this.objectApiName));
+        console.log('this.getSelectedCheckBoxId',JSON.stringify(this.getSelectedCheckBoxId));
+        console.log('this.recordId',JSON.stringify(this.recordId));
+
+        return mergeRecord({sObjectName:this.objectApiName, selectedRecordId:this.getSelectedCheckBoxId, currentRecordId:this.recordId, selectedFields: this.selectedFields})
         .then(result=>{
             console.log('Merger result:: ',result);
+            if(result == 'Merge Successfully'){
+                const e = new ShowToastEvent({
+                    title: 'Success!',
+                    message: 'Record Merge Successfully!!!',
+                    variant: 'success',
+        });
+            this.dispatchEvent(e);
+            this.showMergeData = false;
+            console.log('xxxxxxxxxxx::', result);
+           // this.deleteMergedRecord();
+         this.deleteMergedRecord(result);
+        }
+
         }).catch(error=>{
             console.log(error);
+        });
+    }
+
+
+    // for Reparenting
+    // connectedCallback(){
+    //     this.handleReparenting();
+    // }
+
+    handleReparenting(){
+        console.log('---inside parenting---');
+        console.log('parentObjectName:: ',this.objectApiName);
+        console.log('parentRecordId ::: ',this.getSelectedCheckBoxId);
+        console.log('current REcord Id ::: ',this.recordId);
+
+        getAllChildRecordsAndUpdate({parentObjectName: this.objectApiName, parentRecordId :this.getSelectedCheckBoxId, CurrentRecordID: this.recordId})
+        .then(result=>{
+            console.log('child object with Fields::: ',result);
+        }).catch(error=>{
+            console.log('Error on parenting ' ,error);
         })
     }
 }
@@ -418,7 +519,7 @@ public with sharing class customObjectDuplicateClass {
     
     // This method is used to return SOQL query consisting of all fields for an object that are accessible by the current user.
     @AuraEnabled
-    public static List<SObject> getSObjectFieldsQuery(String sObjectName, String name,Id currentRecordId) {
+    public static List<SObject> getSObjectFieldsQuery(String sObjectName, String name, String email, Id currentRecordId) {
         
         // Getting field names
         List<String> fieldNames = getSObjectFields(sObjectName);
@@ -430,7 +531,7 @@ public with sharing class customObjectDuplicateClass {
         
         // Removing last 2 characters - ', '
         query = query.substring(0, query.lastIndexOf(','));
-        query += ' FROM ' + sObjectName + ' WHERE Name = \'' + String.escapeSingleQuotes(name) + '\'';
+        query += ' FROM ' + sObjectName + ' WHERE Name = \'' + String.escapeSingleQuotes(name) + '\' AND Email__c = \'' + String.escapeSingleQuotes(email) + '\'';
         if(currentRecordId != null){
             query += 'AND Id != \''+ String.escapeSingleQuotes(currentRecordId) + '\'';
         }
@@ -456,21 +557,26 @@ public with sharing class customObjectDuplicateClass {
         
         // Removing last 2 characters - ', '
         query = query.substring(0, query.lastIndexOf(','));
-        query += ' FROM ' + sObjectName + ' WHERE Id = \'' + String.escapeSingleQuotes(currentRecordId) + '\'ORDER BY Name DESC';
+        query += ' FROM ' + sObjectName + ' WHERE Id = \'' + String.escapeSingleQuotes(currentRecordId) + '\'';
         System.debug('query::: '+ query);
         List<SObject> records = Database.query(query);
-        
+        System.debug('recordsrecordsrecordsrecords : '+JSON.serialize(records));
         //to add Empty in Null Value
+        
         for(SObject record: records){
+            System.debug('inside SObject for '+record);
             for(String fieldName: fieldNames){
+                System.debug('inside fieldName for '+fieldName);
                 // Check if the field is editable
-                 Schema.DescribeFieldResult fieldDescribe = Schema.getGlobalDescribe().get(sObjectName).getDescribe().fields.getMap().get(fieldName).getDescribe();
+                Schema.DescribeFieldResult fieldDescribe = Schema.getGlobalDescribe().get(sObjectName).getDescribe().fields.getMap().get(fieldName).getDescribe();
+                System.debug('fieldDescribeL ::: '+fieldDescribe);
                 
                 if(fieldDescribe.isUpdateable()){
                     Object value = record.get(fieldName);
                     if(value == null){
                         if(fieldDescribe.getType() == Schema.DisplayType.String){
                             System.debug('fieldDescribe.getType()'+fieldDescribe.getType());
+                            System.debug('fieldNamefieldName:: '+fieldName);
                             record.put(fieldName, '-');
                         }else if(fieldDescribe.getType() == Schema.DisplayType.Double){
                             record.put(fieldName, 0.0); 
@@ -478,24 +584,33 @@ public with sharing class customObjectDuplicateClass {
                     }
                 }  
             }
-        }
+        } 
         
-        System.debug('records::: '+ records);
-        
-        return records;
+        System.debug('records::: '+ JSON.serialize(records));
+        //  String serialized =List<SObject> JSON.serialize(records);
+        return records;  
     } 
     
     
     //To Get Current Record Name
     @AuraEnabled
-    public static String getCurrentObjectRecordName(Id recId){
+    public static Map<String,String> getCurrentObjectRecordNameAndEmail(Id recId){
+        Map<String,String> nameAndEmailInfo = new Map<String, String>();
+        
         object objName = recId.getSobjectType();
         System.debug(objName);
-        String query = 'Select Name From '+objName+ ' WHERE Id=:recId LIMIT 1';
+        String query = 'Select Name,Email__c From '+objName+ ' WHERE Id=:recId LIMIT 1';
         Sobject myObj = Database.query(query);
-        System.debug(String.valueOf(myObj.get('Name')));
         
-        return String.valueOf(myObj.get('Name'));
+        System.debug(String.valueOf(myObj.get('Name')));
+        nameAndEmailInfo.put('Name',String.valueOf(myObj.get('Name')));
+        nameAndEmailInfo.put('Email__c',String.valueOf(myObj.get('Email__c')));
+        
+        System.debug('Name:: '+ nameAndEmailInfo.get('Name'));
+        System.debug('Email__c:: '+ nameAndEmailInfo.get('Email__c'));
+        
+        System.debug('nameAndEmailInfo::: '+nameAndEmailInfo);
+        return nameAndEmailInfo;
     } 
     
     //To Merge the Records with Current Record
@@ -511,23 +626,125 @@ public with sharing class customObjectDuplicateClass {
         List<SObject> selectedRecordList = getCurrentRecord(sObjectName, selectedRecordId);
         SObject selectedRecord = selectedRecordList[0];
         System.debug('selectedRecord:: '+selectedRecord);
-
+        
         List<String> fieldNames = new List<String>();
         for(String fieldName: selectedFields){
-               System.debug('Inside for '+fieldName);
-            if (selectedRecord.get(fieldName) != null) {
-                      System.debug('Inside If '+selectedRecord.get(fieldName));
-
+            System.debug('Inside for '+fieldName);
+            //  if (selectedRecord.get(fieldName) != null) {
+            //   System.debug('Inside If '+selectedRecord.get(fieldName));
+            
             currentRecord.put(fieldName, selectedRecord.get(fieldName));
+            // }
         }
-     }
-         
+        try{
             update currentRecord;
             System.debug('Updated Record '+ currentRecord);
-            return 'Updated Successfully!';
- 
+            
+        }catch(DmlException ex){
+            System.debug('exxxx::: '+ex.getMessage());
+            // return 'Updated Successfully!';
+            
+        }
+        return 'Merge Successfully';
+    }
+    
+    //To delete Merged Record
+    @AuraEnabled
+    public static String deleteMergedRecord(String sObjectName, String selectedRecordId, String mergeRecordResult){
+        if(mergeRecordResult == 'Merge Successfully'){
+            List<SObject> selectedRecordList = getCurrentRecord(sObjectName, selectedRecordId);
+            SObject SelectedRecord = selectedRecordList[0];
+            System.debug('SelectedRecord For delete:: '+ SelectedRecord);
+            delete SelectedRecord;
+        }
+        return 'Deleted Successfully';
+    }
+    
+    //To Get All Child Objects for reparenting
+    public static Map<String, List<String>> getChildObjectsWithFields(String sObjectName){
+        Map<string, List<String>> childObjectwithFields = new Map<String,List<String>>();
+        
+        Schema.DescribeSObjectResult describeResult = Schema.getGlobalDescribe().get(sObjectName).getDescribe();
+        System.debug('describeResult '+ describeResult);
+        System.debug('describeResult.getChildRelationships '+ describeResult.getChildRelationships());
+        
+        for(Schema.ChildRelationship cr:describeResult.getChildRelationships()){
+            if(cr.getChildSObject().getDescribe().isUpdateable() && cr.getChildSObject().getDescribe().getKeyPrefix()!=null && !cr.getChildSObject().getDescribe().isCustomSetting() && cr.getChildSObject().getDescribe().isCreateable() && cr.getChildSObject().getDescribe().isAccessible()){
+                String childObjectName = cr.getChildSObject().getDescribe().getName();
+                
+                List<String> childObjectFields = new List<String>();
+                for(Schema.SObjectField field: cr.getChildSObject().getDescribe().fields.getMap().values()){
+                    childObjectFields.add(field.getDescribe().getName());
+                }
+                
+                childObjectwithFields.put(childObjectName, childObjectFields);
+            }
+        }
+        System.debug('=====child object With Fields=====::: '+ childObjectwithFields);
+        
+        return childObjectwithFields;
+    }
+    
+    
+    //To Get Child Relationship Name
+    public static String getChildRelationshipFieldName(String parentObjectName, String childObjectName) {
+        String relationshipFieldName = '';
+        // Describe calls to get child relationship
+        Schema.DescribeSObjectResult parentDescribe = Schema.getGlobalDescribe().get(parentObjectName).getDescribe();
+        Schema.DescribeSObjectResult childDescribe = Schema.getGlobalDescribe().get(childObjectName).getDescribe();
+        // Iterate over parent fields to find the relationship field
+        for (Schema.ChildRelationship relation : parentDescribe.getChildRelationships()) {
+            System.debug('relation.getChildSObject().getDescribe().getName()::: '+relation.getChildSObject().getDescribe().getName());
+            System.debug('childDescribe.getName::: '+childDescribe.getName());
+            
+            if (relation.getChildSObject().getDescribe().getName() == childDescribe.getName()) {
+                System.debug('relation.getChildSObject().getDescribe().getName()::: '+relation.getChildSObject().getDescribe().getName());
+                System.debug('childDescribe.getName::: '+childDescribe.getName());
+                relationshipFieldName = relation.getField().getDescribe().getName();
+                break;
+            }
+        }
+        System.debug('relationshipFieldName :: '+relationshipFieldName);
+        return relationshipFieldName;
+    }
+    
+    
+    //To Get All Child Record
+    @AuraEnabled
+    public static Map<String, List<SObject>> getAllChildRecordsAndUpdate (String parentObjectName,Id parentRecordId, Id CurrentRecordID){
+        Map<String, List<SObject>> allChildRecords = new Map<String, List<SObject>>();
+        Map<String, List<String>> getchildObjectWithField = getChildObjectsWithFields(parentObjectName);
+        
+        for(String childObjectName: getchildObjectWithField.keySet()){
+            String relationshipFieldName = getChildRelationshipFieldName(parentObjectName, childObjectName);
+            System.debug('relationshipFieldName:: '+relationshipFieldName);
+            String query = 'SELECT ';
+            List<String> fieldNames = getchildObjectWithField.get(childObjectName);  
+            for(String fieldName: fieldNames){
+                query += ' ' + fieldName + ', ';
+            }
+            
+            query = query.substring(0, query.lastIndexOf(','));
+            query += ' FROM ' + childObjectName + ' WHERE ' + relationshipFieldName + ' = \'' + String.escapeSingleQuotes(parentRecordId) + '\'';
+            System.debug('query:::'+ query);
+            List<SObject> childRecords = Database.query(query);
+            System.debug('childRecords:: '+childRecords);
+            if(childRecords.size()>0){
+                allChildRecords.put(childObjectName, childRecords);
+                System.debug('All Child Records:: '+ allChildRecords);
+                for(SObject childRecord: childRecords){
+                    childRecord.put(relationshipFieldName, currentRecordId);
+                }
+                try{
+                    update childRecords;
+                    System.debug('Updated Syy:: '+childRecords);
+                }catch(Exception e){
+                    System.debug('Error updating child records: ' + e.getMessage());
+                }
+            }
+        }
+        return allChildRecords;
     }
 }
-```
 
-ISsue:- serielise in apex and stringfy in apex
+```
